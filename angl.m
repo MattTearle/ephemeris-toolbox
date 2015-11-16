@@ -1,11 +1,11 @@
 classdef angl
-    %ANGL Angle object: stores angles measured in degrees, radians, or hours
+    % Angle variable: stores angles measured in degrees, radians, or hours
     %
-    %  A = ANGL(X,U) creates an angle array A with values specified by
-    %  the array X and units specified by the string or cell array of
-    %  strings U.  If U is a single string, all values in X will have the
-    %  same units.  If U is a cell array of strings, it must have the same
-    %  dimensions as X.  Units can be specified as 'degrees', 'radians', or
+    %  A = ANGL(X,U) creates an angle array A with values specified by the
+    %  array X and units specified by the string or cell array of strings
+    %  U. If U is a single string, all values in X will have the same
+    %  units. If U is a cell array of strings, it must have the same
+    %  dimensions as X. Units can be specified as 'degrees', 'radians', or
     %  'hours'.
     %
     %  A = ANGL(X) creates an angle array, using default units of
@@ -53,11 +53,13 @@ classdef angl
                 elseif isnumeric(u)
                     unum = u;
                 else
-                    error('Units must be strings ("degrees", "radians", or "hours") or numeric (0, 1, 2)')
+                    error('Ephemeris:Angle:BadUnits',...
+                        'Units must be "degrees", "radians", or "hours"')
                 end
                 % Check units
-                if any(unum==0)
-                    error('Units must be "degrees", "radians", or "hours"')
+                if ~all(ismember(unum(:),[1,2,3]))
+                    error('Ephemeris:Angle:BadUnits',...
+                        'Units must be "degrees", "radians", or "hours"')
                 end
                 % How are the units specified (individually or a single unit)?
                 issameunits = (numel(u)==1);
@@ -66,7 +68,8 @@ classdef angl
                     thisu = unum(1);
                     % Multiple units => check dimensions against x
                 elseif ~isequal(xsize,size(u))
-                    error('Dimension mismatch of values and units')
+                    error('Ephemeris:Angle:MismatchedDimensions',...
+                        'Dimension mismatch of values and units')
                 end
                 % Build the angle!
                 % Scalar
@@ -83,7 +86,6 @@ classdef angl
                         % Call scalar constructor on this single element
                         c(k).value = x(k);
                         c(k).units = thisu;
-                        %                         c(k) = angl(x(k),thisu);  %#ok
                     end % loop over array of values (x)
                     c = reshape(c,xsize);
                 end % if (scalar vs array)
@@ -95,8 +97,6 @@ classdef angl
         
         % TODO: Comments!
         function varargout = fdisp(fstr,A)
-            % FDISP  Formatted display of angles
-            %
             % FDISP(FORMAT,A) displays the array of angles A to the screen,
             % according to the FORMAT string.
             % X = FDISP(FORMAT,A) returns the formatted display to a string X.
@@ -126,7 +126,8 @@ classdef angl
                 fstr = deblank(repmat([fstr,'  '],1,ncol));
                 [idx1,idx2] = regexp(fstr,'%\d*[dtz]');
             elseif ncol ~= n
-                error('Need to specify one format for each column')
+                error('Ephemeris:FDisp:MismatchedDimensions',...
+                    'Need to specify one format for each column')
             end
             % Make space for output text (flip size for transpose)
             outtext = cell(fliplr(size(A)));
@@ -168,8 +169,6 @@ classdef angl
         end
         
         function disp(A)
-            % DISP  Display angle array to the screen
-            %
             % DISP(A) displays the angle array A, without printing the
             % array name.
             
@@ -206,185 +205,271 @@ classdef angl
         end
         
         function s = zodiacform(a)
+            % S = ZODIACFORM(A) returns a cell array of strings
+            % representing the angle variable A in Zodiac form
+            % (deg SIGN min'sec")
+            
+            % Put into [0 360] range
             a = normalizeinrange(a,1);
-            dms = dec2sex(a);
-            x = dms(:,2);
-            s = floor(x/30);
-            x = x - 30*s;
+            % Get degree/min/sec components
+            [~,deg,min,sec] = dec2sex(a);
+            % Determine zodiac sign (30-degree blocks)
+            s = floor(deg/30);
+            % Remainder (degrees within given sign)
+            deg = deg - 30*s;
             zsign = {' Ari ';' Tau ';' Gem ';' Cnc ';' Leo ';' Vir ';' Lib ';' Sco ';' Sgr ';' Cap ';' Aqr ';' Psc '};
-            str = strcat(cellstr(num2str(x,'%02d')),zsign(s+1),num2str(dms(:,3),'%02d'),char(39),num2str(dms(:,4),'%02d'),'"');
+            % Build formatted string
+            str = strcat(cellstr(num2str(deg,'%02d')),zsign(s+1),num2str(min,'%02d'),char(39),num2str(sec,'%02d'),'"');
+            % Ensure output is same shape as input (dec2sex changes shape)
             s = reshape(str,size(a));
         end
         
         function s = timeform(a)
+            % S = TIMEFORM(A) returns a cell array of strings representing
+            % the angle variable A in "time form" (hh:mm:ss)
+            
+            % Put into [0 24] range
             a = normalizeinrange(a,1);
+            % Get hour/min/sec components
             dms = dec2sex(a);
+            % Build formatted string
             str = cellstr(strcat(num2str(dms(:,2),'%02d'),':',num2str(dms(:,3),'%02d'),':',num2str(dms(:,4),'%02d')));
+            % Ensure output is same shape as input (dec2sex changes shape)
             s = reshape(str,size(a));
         end
         
         function s = sexiform(a,n)
-            dms = dec2sex(a);
-            sgn = repmat('+',size(dms(:,1)));
-            sgn(dms(:,1)<0) = '-';
+            % S = SEXIFORM(A) returns a cell array of strings representing
+            % the angle variable A in "sexigesimal form" (+/- deg°mm'ss")
+            
+            % Get degree/min/sec components
+            [s,deg,min,sec] = dec2sex(a);
+            % Build the +/- sign part of the output string
+            sgn = repmat('+',size(s));
+            sgn(s<0) = '-';
+            % Create format string "%0nd", where n is given or determined
             if nargin<2
-                fmt = ['%0',num2str(max(max(floor(log10(abs(dms(:,2))))+1),1),'%1d'),'d'];
+                % n not specified -- calculate it
+                % find number of digits needed for each value of deg
+                % (with a minimum of 1 digit); take the max
+                fmt = ['%0',num2str(max(max(floor(log10(abs(deg)))+1),1),'%1d'),'d'];
             else
                 fmt = ['%0',num2str(n,'%1d'),'d'];
             end
-            str = cellstr(strcat(sgn,num2str(dms(:,2),fmt),char(176),num2str(dms(:,3),'%02d'),char(39),num2str(dms(:,4),'%02d'),'"'));
+            % Build formatted string (char 176 = degree symbol)
+            str = cellstr(strcat(sgn,num2str(deg,fmt),char(176),num2str(min,'%02d'),char(39),num2str(sec,'%02d'),'"'));
+            % Ensure output is same shape as input (dec2sex changes shape)
             s = reshape(str,size(a));
         end
         
+        % Mathematical operators
         function z = plus(x,y)
+            
+            % numeric + angle -> convert numeric to angle
             if isnumeric(x)
+                % Assume number has same units as angle
                 x = angl(x,y.units);
             end
-            [mx,nx] = size(x);
-            [my,ny] = size(y);
-            if (mx*nx==1)
+            nx = numel(x);
+            ny = numel(y);
+            if (nx==1)
+                % x is scalar
                 z = y;
-                if (my*ny==1)
+                if (ny==1)
+                    % y is also scalar => scalar + scalar
                     if isnumeric(y)
+                        % angle + numeric -> convert numeric to angle
+                        % Assume number has same units as angle
                         y = angl(y,x.units);
                     elseif (x.units ~= y.units)
+                        % angle + angle, but with different units
+                        % convert to same units
                         y = convert(y,x.units);
                     end
+                    % Do the addition
                     zval = x.value + y.value;
                     z = angl(zval,x.units);
                 else
+                    % y is array => scalar + array
+                    % Use loop to do scalar expansion
                     for k = 1:ny
-                        for j = 1:my
-                            z(j,k) = x + y(j,k);
-                        end
+                        z(k) = x + y(k);
                     end
                 end
-            elseif (my*ny==1)
+            elseif (ny==1)
+                % x is array, y is scalar => array + scalar
                 z = x;
+                % Use loop to do scalar expansion
                 for k = 1:nx
-                    for j = 1:mx
-                        z(j,k) = x(j,k) + y;
-                    end
+                    z(k) = x(k) + y;
                 end
-            elseif isequal([mx,nx],size(y))
+            elseif isequal(size(x),size(y))
+                % array + array => check for same dimensions
                 z = x;
+                % Use loop to perform elementwise addition
                 for k = 1:nx
-                    for j = 1:mx
-                        z(j,k) = x(j,k) + y(j,k);
-                    end
+                    z(k) = x(k) + y(k);
                 end
             else
-                error('Dimensions do not agree')
+                % array + array but not same dimensions
+                error('Ephemeris:AngleMath:MismatchedDimensions',...
+                    'Dimensions do not agree')
             end
         end
         
+        % TODO: check minus math (range of negative output)
         function z = minus(x,y)
+            % A - B means the angle between two lines from the origin with
+            % polar angles A and B. The smaller of the two complementary
+            % angles is taken. The result is therefore in the range
+            % [-180 180] degrees ([-pi pi] rad, [-12 12] hrs).
+            
+            % numeric + angle -> convert numeric to angle
             if isnumeric(x)
+                % Assume number has same units as angle
                 x = angl(x,y.units);
             end
-            [mx,nx] = size(x);
-            [my,ny] = size(y);
-            if (mx*nx==1)
+            nx = numel(x);
+            ny = numel(y);
+            % x is scalar
+            if (nx==1)
                 z = y;
-                if (my*ny==1)
+                if (ny==1)
+                    % y is also scalar => scalar - scalar
                     if isnumeric(y)
+                        % angle - numeric -> convert numeric to angle
+                        % Assume number has same units as angle
                         y = angl(y,x.units);
                     elseif (x.units ~= y.units)
+                        % angle - angle, but with different units
+                        % convert to same units
                         y = convert(y,x.units);
                     end
+                    % Do the subtraction
                     zval = x.value - y.value;
                     z = angl(zval,x.units);
+                    % Check range of result to determine which way the
+                    % subtraction should go
                     zc = convert(z,'degrees');
                     if (zc.value>180)
                         zc.value = 360 - zc.value;
                         z = convert(zc,z.units);
                     end
                 else
+                    % y is array => scalar - array
+                    % Use loop to do scalar expansion
                     for k = 1:ny
-                        for j = 1:my
-                            z(j,k) = x - y(j,k);
-                        end
+                        z(k) = x - y(k);
                     end
                 end
-            elseif (my*ny==1)
+            elseif (ny==1)
+                % x is array, y is scalar => array - scalar
                 z = x;
+                % Use loop to do scalar expansion
                 for k = 1:nx
-                    for j = 1:mx
-                        z(j,k) = x(j,k) - y;
-                    end
+                    z(k) = x(k) - y;
                 end
-            elseif isequal([mx,nx],size(y))
+            elseif isequal(size(x),size(y))
+                % array - array => check for same dimensions
                 z = x;
+                % Use loop to perform elementwise subtraction
                 for k = 1:nx
-                    for j = 1:mx
-                        z(j,k) = x(j,k) - y(j,k);
-                    end
+                    z(k) = x(k) - y(k);
                 end
             else
-                error('Dimensions do not agree')
+                % array - array but not same dimensions
+                error('Ephemeris:AngleMath:MismatchedDimensions',...
+                    'Dimensions do not agree')
             end
         end
         
         function z = mtimes(x,y)
+            % no matrix multiplication for angles
+            % so mtimes (*) == times (.*)
             z = x.*y;
         end
         
         function z = times(x,y)
+            
+            % angle * numeric = numeric * angle
             if isnumeric(y)
                 z = y.*x;
             else
+                % now x must be numeric
                 if ~isnumeric(x)
-                    error('Only scalar multiplication is defined for angle objects')
+                    error('Ephemeris:AngleMath:NonScalarMultiply',...
+                        'Only scalar multiplication is defined for angles')
                 end
+                % scalar multiply
                 if isscalar(x)
                     z = y;
                     for k = 1:numel(z)
                         z(k).value = x*y(k).value;
                     end
                 elseif isequal(size(x),size(y))
+                    % Array multiply (numeric .* angle)
                     z = y;
                     for k = 1:numel(y)
                         z(k).value = x(k).value*y(k).value;
                     end
                 else
-                    error('Dimension mismatch for scalar multiplication')
+                    error('Ephemeris:AngleMath:MismatchedDimensions',...
+                        'Dimension mismatch for scalar multiplication')
                 end
             end
             z = normalize(z);
         end
         
         function z = mrdivide(x,y)
+            
+            % Allow "x/y" if y is scalar (= x./y)
             if isscalar(y)
                 z = x./y;
             else
-                error('Only scalar division is defined for angle objects')
+                error('Ephemeris:AngleMath:NonScalarDivide',...
+                    'Only scalar division is defined for angles')
             end
         end
         
         function z = rdivide(x,y)
+            
+            % only angle/numeric makes sense
             if isnumeric(y)
                 if isscalar(y)
+                    % angle/scalar
                     z = x;
                     for k = 1:numel(z)
                         z(k).value = z(k).value/y;
                     end
-                    z = normalize(z);
                 elseif isequal(size(x),size(y))
+                    % array divide (angle./numeric)
                     z = x;
                     for k = 1:numel(z)
                         z(k).value = z(k).value/y(k);
                     end
-                    z = normalize(z);
                 else
-                    error('Dimension mismatch for scalar division')
+                    error('Ephemeris:AngleMath:MismatchedDimensions',...
+                        'Dimension mismatch for scalar division')
                 end
             else
-                error('Only scalar division is defined for angle objects')
+                error('Ephemeris:AngleMath:NonScalarDivide',...
+                    'Only scalar division is defined for angles')
+            end
+            z = normalize(z);
+        end
+        
+        function x = uminus(x)
+            for k = 1:numel(x)
+                x(k).value = -(x(k).value);
             end
         end
         
         function y = convert(x,newunits)
+            % Y = CONVERT(X,NEWUNITS) converts the angle array X into an
+            % angle array Y that has units of NEWUNITS.
+            
             y = x;
+            % check newunits
             if ischar(newunits)
                 switch newunits
                     case 'degrees'
@@ -394,31 +479,49 @@ classdef angl
                     case 'hours'
                         newunits = 3;
                     otherwise
-                        error('Units must be "degrees", "radians", or "hours"')
+                        newunits = 0;
                 end
             end
+            % String has been converted to numeric (1, 2, or 3, with 0
+            % being an error). Anything else is disallowed.
+            if ~isnumeric(newunits) || ~ismember(newunits,[1,2,3])
+                error('Ephemeris:Angle:BadUnits',...
+                    'Units must be "degrees", "radians", or "hours"')
+            end
+            % Convert each element of x
             for k = 1:numel(x)
                 if (x(k).units == newunits)
+                    % No conversion necessary
                     y(k) = x(k);
                 else
+                    % Convert...
                     switch x(k).units
                         case 1
+                            % ...from degrees...
                             if (newunits == 2)
+                                % ...into radians
                                 yval = x(k).value*pi/180;
                             elseif (newunits == 3)
+                                % ...into hours
                                 yval = x(k).value/15;
                             end
                         case 2
+                            % ...from radians...
                             if (newunits == 1)
+                                % ...into degrees
                                 yval = x(k).value*180/pi;
                             elseif (newunits == 3)
+                                % ...into hours
                                 yval = x(k).value*12/pi;
                             end
                         case 3
-                            if (newunits == 2)
-                                yval = x(k).value*pi/12;
-                            elseif (newunits == 1)
+                            % ...from hours...
+                            if (newunits == 1)
+                                % ...into degrees
                                 yval = x(k).value*15;
+                            elseif (newunits == 2)
+                                % ...into radians
+                                yval = x(k).value*pi/12;
                             end
                     end
                     y(k).value = yval;
@@ -428,59 +531,103 @@ classdef angl
         end
         
         function x = normalize(x)
+            % Y = NORMALIZE(X) returns an angle Y that has the same
+            % physical meaning as the angle X but with the value of the
+            % angle restricted to [0 360) degrees, [0 2*pi) radians, or
+            % [0 24) hours.
+            
+            % Use more general normalization method
             x = normalizeinrange(x,2);
         end
         
         function x = normalizeinrange(x,rng)
+            % Y = NORMALIZEINRANGE(X) returns an angle Y that has the same
+            % physical meaning as the angle X but with the value of the
+            % angle restricted to lie in the range RNG. The range can be
+            % specified as a two-element vector (e.g. [0 pi] or [-90 90])
+            % or as the scalar values -1, 0, 1, 2, which correspond to:
+            % RNG |  degrees     radians       hours
+            % ------------------------------------------
+            % -1  |  [-360,0)    [-2*pi 0)     [-24 0)
+            %  0  |  [-180,180)  [-pi pi)      [-12 12)
+            %  1  |  [0 360)     [0 2*pi)      [0 24)
+            %  2  |  [-360 360)  [-2*pi 2*pi)  [-24 24)
+            
+            % Check input
             if ~isnumeric(rng) || ~isvector(rng) || (isscalar(rng) && ~ismember(rng,-1:2))
-                error('Range must be specified as a numeric vector [a,b] or scalar (-1, 0, 1, or 2)')
+                error('Ephemeris:Angle:BadRange',...
+                    'Range must be specified as a numeric vector [a,b] or scalar (-1, 0, 1, or 2)')
             end
+            % Normalize each element
             for k = 1:numel(x)
                 if isscalar(rng)
-                    switch 5*x(k).units + rng
-                        case 14
-                            r = [-24,0];
-                        case 15
-                            r = [-12,12];
-                        case 16
-                            r = [0,24];
-                        case 17
-                            r = [-24,24];
-                        case 9
-                            r = [-2*pi,0];
-                        case 10
-                            r = [-pi,pi];
-                        case 11
-                            r = [0,2*pi];
-                        case 12
-                            r = [-2*pi,2*pi];
-                        case 4
+                    % Interpret scalar RNG (-1, 0, 1, or 2)
+                    % Cunning trick: units are stored internally as 1, 2 or
+                    % 3. Take 4*units (4, 8, or 12) and add RNG. Result is
+                    % a unique value from 3 to 14:
+                    switch 4*x(k).units + rng
+                        % degrees
+                        case 3
                             r = [-360,0];
-                        case 5
+                        case 4
                             r = [-180,180];
-                        case 6
+                        case 5
                             r = [0,360];
-                        case 7
+                        case 6
                             r = [-360,360];
+                        % radians
+                        case 7
+                            r = [-2*pi,0];
+                        case 8
+                            r = [-pi,pi];
+                        case 9
+                            r = [0,2*pi];
+                        case 10
+                            r = [-2*pi,2*pi];
+                        % hours
+                        case 11
+                            r = [-24,0];
+                        case 12
+                            r = [-12,12];
+                        case 13
+                            r = [0,24];
+                        case 14
+                            r = [-24,24];
                     end
                 else
+                    % Otherwise, just use given numeric interval
                     r = rng;
                 end
+                % Use MOD to wrap value into an interval of length
+                % r(2)-r(1) (= diff(r)), with minimum value r(1)
                 x(k).value = r(1) + mod(x(k).value+r(1),diff(r));
             end
         end
         
         function x = double(a,u)
+            % X = DOUBLE(A) converts the angle array A to the double array
+            % X containing the values of the angles in degrees.
+            % X = DOUBLE(A,UNITS) uses the values of the angles in the
+            % given units ("degrees", "radians", or "hours").
+            % X = DOUBLE(A,'none') does not perform any conversion. The
+            % values of the angles are left in their original units.
+            
+            % Default = degrees
             if nargin<2
                 u = 1;
             end
+            % Check for 'none' flag (convert unless U is "no*")
             if ~ischar(u) || ~strncmpi(u,'no',2)
                 a = convert(a,u);
             end
+            % Extract values and reshape to match input
             x = reshape([a.value],size(a));
         end
         
         function varargout = dec2sex(x,frac)
+            % SDMS = DEC2SEX(X) converts the vector of decimal angles X to
+            % sexigesimal form. The result is a matrix SDMS with four
+            % columns: sign (+/- 1), degrees, minutes, seconds.
             if nargin<2
                 frac = false;
             end
@@ -503,7 +650,7 @@ classdef angl
             idx = (m == 60);
             m(idx) = 0;
             d(idx) = d(idx)+1;
-            %             d = sgn.*d;
+%             d = sgn.*d;
             if nargout<2
                 varargout{1} = [sgn,d,m,s];
             elseif nargout==4
@@ -513,11 +660,7 @@ classdef angl
             end
         end
         
-        function x = uminus(x)
-            for k = 1:numel(x)
-                x(k).value = -(x(k).value);
-            end
-        end
+        % Basic rounding math operations (all elementwise)
         function x = floor(x)
             for k = 1:numel(x)
                 x(k).value = floor(x(k).value);
@@ -534,6 +677,8 @@ classdef angl
             end
         end
         
+        % Trig functions
+        % Convert to radians and apply elementwise
         function y = sin(x)
             z = convert(x,2);
             y = reshape(sin([z.value]),size(z));
@@ -546,7 +691,7 @@ classdef angl
             z = convert(x,2);
             y = reshape(tan([z.value]),size(z));
         end
-        
+
         function plot(lon,lat,mag)
             if size(lon,2)==2
                 x = lon(:,1);
@@ -644,7 +789,7 @@ classdef angl
         end
         function z = atan(y,x)
             if nargin<2
-                x =ones(size(y));
+                x = ones(size(y));
             end
             idx = (sign(x)<=0);
             z = angl(atand(y./x));
