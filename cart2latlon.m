@@ -1,5 +1,6 @@
 function y = cart2latlon(x)
+% Convert Cartesian coordinates (x,y,z) to latitude & longitude
 
-lat = angl.atan(x(:,2,:),x(:,1,:));
-lon = angl.asin(x(:,3,:)./sqrt(sum(x.^2,2)));
+lat = normalizeinrange(angl.atan(x(:,2,:),x(:,1,:)),1);
+lon = normalizeinrange(angl.asin(x(:,3,:)./sqrt(sum(x.^2,2))),0);
 y = [lat,lon];
