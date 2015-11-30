@@ -56,3 +56,5 @@ planet = zeros(length(dt),6,numplanet);
 for k = 1:numplanet
     planet(:,:,k) = bsxfun(@plus,OE(k,:),bsxfun(@times,dt,Delta(k,:)));
 end
+
+planet = permute(planet,[3 2 1]);
