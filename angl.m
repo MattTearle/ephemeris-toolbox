@@ -692,21 +692,21 @@ classdef angl
             y = reshape(tan([z.value]),size(z));
         end
 
-%         function plot(lon,lat,mag)
-%             if size(lon,2)==2
-%                 x = lon(:,1);
-%                 y = lon(:,2);
-%                 mag = lat;
-%             else
-%                 x = lon;
-%                 y = lat;
-%             end
-%             x = normalizeinrange(convert(x,1),0);
-%             y = normalizeinrange(convert(y,1),0);
-%             scatter([x.value],[y.value],10.^(-mag),'w','filled')
-%             axis([-200,200,-90,90])
-%             set(gca,'color','k')
-%         end
+        function plot(lon,lat,mag)
+            if size(lon,2)==2
+                x = lon(:,1);
+                y = lon(:,2);
+                mag = lat;
+            else
+                x = lon;
+                y = lat;
+            end
+            x = normalizeinrange(convert(x,1),0);
+            y = normalizeinrange(convert(y,1),0);
+            scatter([x.value],[y.value],10.^(-mag),'w','filled')
+            axis([-200,200,-90,90])
+            set(gca,'color','k')
+        end
         
         function scatter(lon,lat,varargin)
             if size(lon,2)==2
