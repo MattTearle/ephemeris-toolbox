@@ -2,26 +2,22 @@ function varargout = ephemeris(varargin)
 
 % Get required inputs out of variable input list
 [t,planets,outformat,outtype] = parseinputs(varargin,nargout);
-% Get orbital element information and calculate heliocentric position of
-% all planets, plus Earth (for reference)
-oe = getorbitalelements(t,[planets;{'Earth'}]);
-x = heliocentricposition(oe);
-% Calculate cartesian position relative to Earth
-dx = bsxfun(@minus,x(1:end-1,:,:),x(end,:,:));
+% Calculate geocentric position
+x = geocentricposition(t,planets);
 % Convert geocentric cartesian position to desired coordinate frame
 if ~strcmp(outformat,'equatorial')
     % ecliptic position
-    position = cart2latlon(dx);
+    position = cart2latlon(x);
 end
 if ~strcmp(outformat,'ecliptic')
     % transform into equatorial
-    x = dx;
+    y = x;
     e = obliquity(reshape(t(:),1,1,[]));
     c = cos(e);
     s = sin(e);
-    x(:,2,:) = bsxfun(@times,c,dx(:,2,:)) - bsxfun(@times,s,dx(:,3,:));
-    x(:,3,:) = bsxfun(@times,s,dx(:,2,:)) + bsxfun(@times,c,dx(:,3,:));
-    RAdec = cart2latlon(x);
+    y(:,2,:) = bsxfun(@times,c,x(:,2,:)) - bsxfun(@times,s,x(:,3,:));
+    y(:,3,:) = bsxfun(@times,s,x(:,2,:)) + bsxfun(@times,c,x(:,3,:));
+    RAdec = cart2latlon(y);
     % RA typically given in time units
     RAdec(:,1,:) = convert(RAdec(:,1,:),'hours');
     if strcmp(outformat,'both')
@@ -58,8 +54,8 @@ switch outtype
         % Rearrange 3-D array into 2-D table
         position = reshape(permute(position,[1 3 2]),np*nt,no);
         % Expand planet names and times to match table rows
-        time = repmat(t(:),np,1);
-        planets = repelem(planets(:),nt,1);
+        time = repelem(t(:),np,1);
+        planets = repmat(planets(:),nt,1);
         % Make table row names (for rearranged array) by combining planet
         % names with date strings
         rname = strcat(planets,{' '},cellstr(time));
@@ -73,20 +69,20 @@ switch outtype
             case 'both'
                 vname = [vname,{'Longitude','Latitude','RA','Declination'}];
         end
-        if nargout==1
-            % Make output table
-            varargout{1} = [table(planets,time),array2table(position)];
-            varargout{1}.Properties.VariableNames = vname;
-            varargout{1}.Properties.RowNames = rname;
-        else
-            error('Ephemeris:OutputNumberMismatch',...
-                'Only one output can be specified when output format is ''table''')
-        end
+        % Make output table
+        varargout{1} = [table(planets,time),array2table(position)];
+        varargout{1}.Properties.VariableNames = vname;
+        varargout{1}.Properties.RowNames = rname;
     case 'none'
+        % Calculate position 1 second later to look for retrograde motion
+        x = geocentricposition(t+duration(0,0,1),planets);
+        posdt = cart2latlon(x);
+        retro = double(reshape(position(:,1,:) - posdt(:,1,:),[np,nt])) > 0;
         % Set labels for header lines and rows
         if np == 1;
             % One planet -> change order so rows = times
             position = permute(position,[3 2 1]);
+            retro = retro';
             rname = cellstr(t(:));
             loopstr = planets(:);
             headerstr = 'Time';
@@ -105,6 +101,7 @@ switch outtype
             disp([headerstr,'Longitude      Latitude        RA      Declination'])
             % Get formatted display and split into cell array
             txt = regexp(fdisp(' %z    %1d    %t    %2d',position(:,:,k)),'\n','split');
+            txt(retro(:,k)) = regexprep(txt(retro(:,k)),'(\d\d \w\w\w \d\d''\d\d") ','$1R');
             % Add row names and print
             txt = [rname,txt(:)]';
             fprintf(1,['%-',num2str(longnm),'s   %s\n'],txt{:});
@@ -205,16 +202,6 @@ if isempty(planets)
     planets = allnames;
 end
 % Check that options make sense with the number of outputs
-if isempty(outformat)
-    if (n==0) || (n==4)
-        outformat = 'both';
-    else
-        outformat = 'equatorial';
-    end
-elseif n==0
-    warning('Output format ignored when there are no output arguments') %#ok<WNTAG>
-    outformat = 'both';
-end
 if isempty(outtype)
     if n==0
         outtype = 'none';
@@ -226,4 +213,18 @@ if isempty(outtype)
 elseif n==0
     warning('Output type ignored when there are no output arguments') %#ok<WNTAG>
     outtype = 'none';
+end
+if (n~=1) && strcmp(outtype,'table')
+    error('Ephemeris:OutputNumberMismatch',...
+        'Only one output can be specified when output format is ''table''')
+end
+if isempty(outformat)
+    if n==2
+        outformat = 'equatorial';
+    else
+        outformat = 'both';
+    end
+elseif n==0
+    warning('Output format ignored when there are no output arguments') %#ok<WNTAG>
+    outformat = 'both';
 end
