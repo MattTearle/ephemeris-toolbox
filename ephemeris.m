@@ -96,15 +96,21 @@ switch outtype
         longnm = max(n,size(char(rname),2));
         headerstr = [headerstr,repmat(' ',1,longnm-n+6)];
         % Loop over times (or single planet)
+        outtxt = '';
         for k = 1:length(loopstr)
-            disp(loopstr{k})
-            disp([headerstr,'Longitude      Latitude        RA      Declination'])
+            outtxt = [outtxt,sprintf('%s\n',loopstr{k})]; %#ok<*AGROW>
+            outtxt = [outtxt,sprintf('%\n',[headerstr,'Longitude      Latitude        RA      Declination'])];
             % Get formatted display and split into cell array
             txt = regexp(fdisp(' %z    %1d    %t    %2d',position(:,:,k)),'\n','split');
             txt(retro(:,k)) = regexprep(txt(retro(:,k)),'(\d\d \w\w\w \d\d''\d\d") ','$1R');
             % Add row names and print
             txt = [rname,txt(:)]';
-            fprintf(1,['%-',num2str(longnm),'s   %s\n'],txt{:});
+            outtxt = [outtxt,sprintf(['%-',num2str(longnm),'s   %s\n'],txt{:})]; 
+        end
+        if nargout
+            varargout{1} = outtxt;
+        else
+            disp(outtxt)
         end
 end
 
@@ -141,7 +147,7 @@ for k = 1:length(c)
                     'Multiple specifications of output format')
             end
         % See if input is valid output type
-        elseif ismember(lowthis,{'table','matrix'})
+        elseif ismember(lowthis,{'table','matrix','none'})
             % Check that there isn't already a type specified
             if isempty(outtype)
                 outtype = lowthis;
